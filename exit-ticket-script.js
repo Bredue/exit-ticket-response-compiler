@@ -21,7 +21,7 @@ function fillGoogleSheet(sheet, forms, allFormData) {
       if (student.period !== currentPeriod) {
         currentPeriod = student.period;
         switchStatus = !switchStatus;
-      }
+      };
 
       // teacher name cell
       sheet.getRange(row, forms[formData.formOrder].startColumn).setValue(`${!isNaN(Number(student.period)) ? student.period : ""}-${student.teacherName}`);
@@ -43,7 +43,7 @@ function fillGoogleSheet(sheet, forms, allFormData) {
     });
   });
 
-  const averageScores = buildTeacherAverages(allFormData);
+  const averageScores = buildTeacherExitTicketAverages(allFormData);
   fillTeacherAverages(sheet, averageScores);
 };
 
@@ -59,8 +59,8 @@ function buildExitTicketFrames(sheet, forms, formData) {
     let endColumn = forms[exitTicketData.formOrder].startColumn + 4;
     if (endColumn > maxColumn) {
       maxColumn = endColumn;
-    }
-  }
+    };
+  };
 
   // Expand sheet columns if needed
   if (sheet.getMaxColumns() < maxColumn) {
@@ -90,7 +90,7 @@ function buildExitTicketFrames(sheet, forms, formData) {
   };
 };
 
-function buildTeacherAverages(allFormData) {
+function buildTeacherExitTicketAverages(allFormData) {
   const quizzes = [];
 
   allFormData.forEach((formData, index) => {
@@ -108,6 +108,8 @@ function buildTeacherAverages(allFormData) {
           possibleScore 
         } = student;
 
+
+
         // Track total scores for overall average
         totalScore += score;
         totalPossible += possibleScore;
@@ -115,7 +117,7 @@ function buildTeacherAverages(allFormData) {
         // Initialize teacher entry if not exists
         if (!teacherScores[teacherName]) {
           teacherScores[teacherName] = { totalScore: 0, totalPossible: 0 };
-        }
+        };
 
         // Accumulate scores for teacher
         teacherScores[teacherName].totalScore += score;
@@ -138,7 +140,7 @@ function buildTeacherAverages(allFormData) {
         overallAverage: overallAverage,
         teacherAverages: teacherAverages
       });
-    }
+    };
   });
 
   return quizzes;
@@ -173,9 +175,9 @@ function getScoreBackgroundColor(score, possibleScore) {
 
   const percentage = (score / possibleScore) * 100;
 
-  if (percentage > 90) {
+  if (percentage > 80) {
     return "#C9DAF8"; // light blue
-  } else if (percentage > 75) {
+  } else if (percentage > 60) {
     return "#D9EAD3"; // light green
   } else if (percentage > 40) {
     return "#FFF2CC"; // light yellow

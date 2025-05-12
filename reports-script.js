@@ -1,5 +1,5 @@
 function buildReports(forms) {
-  const allFormData = compileFormResponses(forms, 'reports');
+  const allFormData = compileFormResponses(forms);
   const allStudents = [];
   const teacherAverages = {};
   const formStrandPerformance = {};
@@ -31,7 +31,9 @@ function buildReports(forms) {
             period: period,
             score: response.score,
             possibleScore: response.possibleScore,
-            formStrand: response.strand,  
+            formStrand: response.strand,
+            formTitle: formData.formTitle,
+            formOrder: formData.formOrder,
         };
 
         allStudents.push(studentObj);
@@ -69,14 +71,17 @@ function buildReports(forms) {
     });
   });
 
+  // Helper function to get total number of forms
+  const totalForms = getTotalNumberOfForms(studentRecords);
+
   // Step 3: Find Top & Bottom Fliers (Only Include Students in Last 5 Exit Tickets)
-  const studentFliers = buildStudentFliers(studentRecords);
+  const studentFliers = buildStudentFliers(totalForms, studentRecords);
 
   // Step 4: Compute Teacher Period Averages (Exclude invalid periods)
   const teacherPeriodAverages = buildTeacherAverages(teacherAverages);  
 
   // Step 5: Determine Top and Bottom 10% Students (Based on the Whole Year)
-  const bottomAndTopStudents = buildTopAndBottomTenPercentStudents(studentRecords);
+  const bottomAndTopStudents = buildTopAndBottomTenPercentStudents(totalForms, studentRecords);
 
   // Step 6: Find Best & Worst Teachers Per Strand
   const topBottomTeachers = buildTopAndBottomTeachers(formStrandPerformance);
@@ -91,31 +96,50 @@ function buildReports(forms) {
   };
 };
 
-function buildStudentFliers (studentRecords) {
+function getTotalNumberOfForms(studentRecords) {
+  // Step 1: Determine max formOrder to get total number of forms
+  let maxFormOrder = -1;
+  Object.values(studentRecords).forEach(responses => {
+    responses.forEach(r => {
+      if (typeof r.formOrder === 'number' && r.formOrder > maxFormOrder) {
+        maxFormOrder = r.formOrder;
+      }
+    });
+  });
+  const totalForms = maxFormOrder + 1;
+  return totalForms;
+};
+
+function buildStudentFliers(totalForms, studentRecords) {
   const topFliers = [];
   const bottomFliers = [];
-  
+
+  // Evaluate each student
   Object.entries(studentRecords).forEach(([email, responses]) => {
     if (responses.length < 3) return; // Need at least 3 responses
-  
-    const lastThree = responses.slice(-3);
-    const overallAvg = responses.reduce((sum, s) => sum + (s.score / s.possibleScore), 0) / responses.length;
+
+    // Skip if they haven’t completed at least 50% of all available forms
+    if (responses.length / totalForms < 0.5) return;
+
+    // Sort responses by formOrder in case they're out of order
+    const sortedResponses = [...responses].sort((a, b) => a.formOrder - b.formOrder);
+
+    const lastThree = sortedResponses.slice(-3);
+    const overallAvg = sortedResponses.reduce((sum, s) => sum + (s.score / s.possibleScore), 0) / sortedResponses.length;
     const lastAvg = lastThree.reduce((sum, s) => sum + (s.score / s.possibleScore), 0) / lastThree.length;
     const percentChange = (lastAvg - overallAvg) / overallAvg;
-  
-    if (percentChange >= 0.25) {
-      topFliers.push({ 
-        email, 
-        studentName: responses[0].studentName,
-        teacher: responses[0].teacher
-      });
-    } else if (percentChange <= -0.25) {
-      bottomFliers.push({ 
-        email, 
-        studentName: responses[0].studentName,
-        teacher: responses[0].teacher
-      });
+
+    const flierData = {
+      email,
+      studentName: sortedResponses[0].studentName?.trim(),
+      teacher: sortedResponses[sortedResponses.length - 1].teacher,
     };
+
+    if (percentChange >= 0.25) {
+      topFliers.push(flierData);
+    } else if (percentChange <= -0.25) {
+      bottomFliers.push(flierData);
+    }
   });
 
   return {
@@ -135,40 +159,44 @@ function buildTeacherAverages (teacherAverages) {
   return teacherPeriodAverages;
 }
 
-function buildTopAndBottomTenPercentStudents(studentRecords) {
-  const uniqueStudents = Object.entries(studentRecords).map(([email, responses]) => {
+function buildTopAndBottomTenPercentStudents(totalForms, studentRecords) {
+  const qualifiedStudents = Object.entries(studentRecords).map(([email, responses]) => {
+    if (responses.length / totalForms < 0.5) return null;
+
     const totalScore = responses.reduce((sum, s) => sum + s.score, 0);
     const totalPossible = responses.reduce((sum, s) => sum + s.possibleScore, 0);
 
-    return totalPossible > 0 ? { 
-        email, 
-        studentName: responses[0].studentName, 
-        teacher: responses[0].teacher,
-        avgPercentage: totalScore / totalPossible 
+    return totalPossible > 0 ? {
+      email,
+      studentName: responses[0].studentName?.trim(),
+      teacher: responses[responses.length - 1].teacher,
+      avgPercentage: totalScore / totalPossible
     } : null;
-  }).filter(Boolean); // Remove null values
+  }).filter(Boolean);
 
-  uniqueStudents.sort((a, b) => b.avgPercentage - a.avgPercentage);
+  // Step 3: Sort students by average percentage (high to low)
+  qualifiedStudents.sort((a, b) => b.avgPercentage - a.avgPercentage);
 
-  const numStudents = uniqueStudents.length;
+  // Step 4: Get 10% top and bottom performers
+  const numStudents = qualifiedStudents.length;
   const topCount = Math.ceil(numStudents * 0.1);
   const bottomCount = Math.ceil(numStudents * 0.1);
 
-  const top10StudentsList = uniqueStudents.slice(0, topCount).map(s => ({ 
-    email: s.email, 
-    studentName: s.studentName, 
-    teacher: s.teacher
+  const top10StudentsList = qualifiedStudents.slice(0, topCount).map(s => ({
+    email: s.email,
+    studentName: s.studentName,
+    teacher: s.teacher,
   })).sort((a, b) => a.teacher.localeCompare(b.teacher));
 
-  const bottom10StudentsList = uniqueStudents.slice(-bottomCount).map(s => ({ 
-    email: s.email, 
-    studentName: s.studentName, 
-    teacher: s.teacher
+  const bottom10StudentsList = qualifiedStudents.slice(-bottomCount).map(s => ({
+    email: s.email,
+    studentName: s.studentName,
+    teacher: s.teacher,
   })).sort((a, b) => a.teacher.localeCompare(b.teacher));
 
   return {
     top10Students: top10StudentsList,
-    bottom10Students: bottom10StudentsList,
+    bottom10Students: bottom10StudentsList
   };
 };
 
@@ -271,7 +299,7 @@ function fillReportsSheet(data) {
           currentTeacher = student.teacher;
       };
 
-      return [`${student.studentName.trim()} --- ${student.email} --- ${student.teacher}`];
+      return [`${student.studentName.trim()} --- ${student.email.split("@")[0]} --- ${student.teacher}`];
     });
 
     if (studentData.length > 0) {

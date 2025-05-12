@@ -1,4 +1,4 @@
-function compileFormResponses(forms, compileType) {
+function compileFormResponses(forms) {
   const formsResponses = [];
 
   forms.forEach(function(formInfo) {
@@ -6,18 +6,6 @@ function compileFormResponses(forms, compileType) {
     const formTitle = form.getTitle();
     const responses = form.getResponses();
     const allStudentResponses = [];
-
-    if (compileType === 'exit-ticket') {
-      // Skip form compilation if no responses are found or if no new responses have been added in 30 days
-      if (responses.length === 0) return;
-
-      responses.sort((a, b) => a.getTimestamp() - b.getTimestamp());
-      const oldestResponseDate = responses[0].getTimestamp();
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      if (oldestResponseDate < thirtyDaysAgo) return;
-    };
     
     responses.forEach(function(response) {
       const itemResponses = response.getItemResponses();
@@ -63,6 +51,8 @@ function compileFormResponses(forms, compileType) {
       allStudentResponses: allStudentResponses,
       formOrder: formInfo.order,
       formTitle: formTitle,
+      formStrand: formInfo.strand,
+      formUrl: formInfo.url,
     };
 
     formsResponses.push(responseObject);
@@ -84,7 +74,7 @@ class StudentResponse {
     this.strand = strand;
     this.teacherName = teacherName;
     this.studentName = studentName;
-    this.email = email.split("@")[0];
+    this.email = email;
     this.period = classPeriod;
     this.score = score;
     this.possibleScore = possibleScore;
